@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Finite Basis Gaussian — interactive</title>
+  <style>
+    /* ── Palette & chrome (reference dataviz palette; swap values to re-brand) ── */
+    :root {
+      color-scheme: light;
+      --page: #f9f9f7;
+      --surface-1: #fcfcfb;
+      --text-primary: #0b0b0b;
+      --text-secondary: #52514e;
+      --text-muted: #898781;
+      --grid: #e1e0d9;
+      --axis: #c3c2b7;
+      --border: rgba(11, 11, 11, 0.10);
+      --series-1: #2a78d6;
+      /* blue    — true function / sample 1 */
+      --series-2: #eb6834;
+      /* orange  — posterior mean / sample 2 */
+      --series-3: #1baf7a;
+      /* aqua    — adaptive posterior / sample 3 */
+      --series-4: #eda100;
+      --series-5: #e87ba4;
+      --series-6: #008300;
+      --series-7: #6250d6;
+      --series-8: #e34948;
+      /* ordinal blue ramp (frequency order), light mode: steps 250→650 */
+      --ramp-1: #86b6ef;
+      --ramp-2: #5598e7;
+      --ramp-3: #2a78d6;
+      --ramp-4: #1c5cab;
+      --ramp-5: #104281;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        color-scheme: dark;
+        --page: #0d0d0d;
+        --surface-1: #1a1a19;
+        --text-primary: #f0efec;
+        --text-secondary: #c3c2b7;
+        --text-muted: #898781;
+        --grid: #2c2c2a;
+        --axis: #383835;
+        --border: rgba(255, 255, 255, 0.10);
+        --series-1: #3987e5;
+        --series-2: #d95926;
+        --series-3: #199e70;
+        --series-4: #c98500;
+        --series-5: #d55181;
+        --series-6: #008300;
+        --series-7: #9085e9;
+        --series-8: #e66767;
+        /* dark-mode ordinal ramp: steps 200→600 (darkest step ≥2:1 on dark surface) */
+        --ramp-1: #9ec5f4;
+        --ramp-2: #6da7ec;
+        --ramp-3: #3987e5;
+        --ramp-4: #256abf;
+        --ramp-5: #184f95;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface-1: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-5: #d55181;
+      --series-6: #008300;
+      --series-7: #9085e9;
+      --series-8: #e66767;
+      --ramp-1: #9ec5f4;
+      --ramp-2: #6da7ec;
+      --ramp-3: #3987e5;
+      --ramp-4: #256abf;
+      --ramp-5: #184f95;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--text-primary);
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    main {
+      max-width: 2600px;
+      margin: 0 auto;
+      padding: 14px 20px 36px;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin: 2px 0 2px;
+    }
+
+    h2 {
+      font-size: 14.5px;
+      margin: 0 0 2px;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      margin: 0 0 10px;
+      font-size: 13px;
+      max-width: 120ch;
+    }
+
+    /* ── 2×4 dashboard grid ── */
+    .grid8 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px 14px;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 1500px) {
+      .grid8 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 800px) {
+      .grid8 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .cell {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cell .card {
+      flex: 1;
+    }
+
+    details.cap {
+      font-size: 12px;
+      margin: 0 0 2px;
+    }
+
+    details.cap summary {
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    details.cap p {
+      color: var(--text-secondary);
+      margin: 3px 0 4px;
+    }
+
+    code,
+    .mono {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 0.92em;
+    }
+
+    /* ── Controls row ── */
+    .controls {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: var(--surface-1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 22px;
+      align-items: flex-end;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .ctl {
+      display: flex;
+      flex-direction: column;
+      min-width: 108px;
+      padding-bottom: 4px;
+    }
+
+    .ctl label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .ctl .val {
+      font-weight: 600;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ctl input[type=range] {
+      width: 108px;
+      accent-color: var(--series-1);
+    }
+
+    .ctl input[type=number] {
+      width: 84px;
+      font: inherit;
+      background: var(--page);
+      color: var(--text-primary);
+      border: 1px solid var(--axis);
+      border-radius: 6px;
+      padding: 2px 6px;
+    }
+
+    .controls button {
+      font: inherit;
+      font-size: 13px;
+      padding: 5px 12px;
+      margin-bottom: 8px;
+      border: 1px solid var(--axis);
+      border-radius: 7px;
+      background: var(--page);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .controls button:hover {
+      border-color: var(--text-muted);
+    }
+
+    /* ── Chart cards ── */
+    .card {
+      background: var(--surface-1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px 6px;
+      margin: 3px 0 4px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 12px;
+      margin: 0 0 4px;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+    }
+
+    .legend .key {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend .swatch-line {
+      width: 18px;
+      height: 0;
+      border-top: 2.5px solid;
+      border-radius: 2px;
+    }
+
+    .legend .swatch-dash {
+      width: 18px;
+      height: 0;
+      border-top: 2.5px dashed;
+    }
+
+    .legend .swatch-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+
+    .legend .swatch-band {
+      width: 18px;
+      height: 10px;
+      border-radius: 2px;
+      opacity: 0.25;
+    }
+
+    svg.chart {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    svg.chart:focus {
+      outline: 2px solid var(--series-1);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
+    .gridline {
+      stroke: var(--grid);
+      stroke-width: 1;
+    }
+
+    .axisline {
+      stroke: var(--axis);
+      stroke-width: 1;
+    }
+
+    .ticktext {
+      fill: var(--text-muted);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tracelab {
+      fill: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .xhair {
+      stroke: var(--text-muted);
+      stroke-width: 1;
+    }
+
+    /* adaptive-step scrubber (panel 7) */
+    .scrub {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin: 0 0 4px;
+    }
+
+    .scrub input[type=range] {
+      flex: 1;
+      min-width: 60px;
+      accent-color: var(--series-3);
+    }
+
+    .scrub .val {
+      font-weight: 600;
+      min-width: 2ch;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .duo {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .panel-sub {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      margin: 0 0 2px;
+    }
+
+    /* stat tiles */
+    .tiles {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 0 0 4px;
+    }
+
+    .tile {
+      background: var(--surface-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .tile .lbl {
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .tile .num {
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    .tile .sub {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* tooltip */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      z-index: 50;
+      display: none;
+      background: var(--surface-1);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+      padding: 7px 10px;
+      font-size: 12.5px;
+      max-width: 260px;
+    }
+
+    #tooltip .tt-x {
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    #tooltip .row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    #tooltip .row .k {
+      width: 14px;
+      height: 0;
+      border-top: 2.5px solid;
+      flex: none;
+    }
+
+    #tooltip .row .v {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #tooltip .row .n {
+      color: var(--text-secondary);
+    }
+
+    /* table views */
+    details.tbl {
+      margin: 1px 0 2px;
+      font-size: 12px;
+    }
+
+    details.tbl summary {
+      cursor: pointer;
+      color: var(--text-secondary);
+    }
+
+    details.tbl table {
+      border-collapse: collapse;
+      margin-top: 6px;
+      background: var(--surface-1);
+    }
+
+    details.tbl th,
+    details.tbl td {
+      border: 1px solid var(--grid);
+      padding: 3px 9px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    details.tbl th {
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    details.tbl td:first-child,
+    details.tbl th:first-child {
+      text-align: left;
+    }
+
+    .theme-toggle {
+      float: right;
+      font: inherit;
+      font-size: 13px;
+      padding: 4px 10px;
+      border: 1px solid var(--axis);
+      border-radius: 7px;
+      background: var(--surface-1);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    footer {
+      margin-top: 18px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    a {
+      color: var(--series-1);
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <button class="theme-toggle" id="themeToggle" type="button">Theme: auto</button>
+    <h1>Bayesian function estimation with a finite sinusoidal basis</h1>
+    <p class="subtitle">
+      Interactive companion to the <code>example_finitebasis_gaussian</code> notebook in
+      <code>wppmpy_public</code>. A function on [0, 2π) is represented as a weighted sum of
+      sinusoids; a Gaussian prior on the weights (standard deviation decaying with frequency,
+      σ<sub>j</sub> = γ·e<sup>−ε·k<sub>j</sub></sup>) encodes smoothness; noisy measurements
+      yield a closed-form Gaussian posterior. Move the sliders — every panel recomputes live.
+      All computation runs in this page; no server or Python needed.
+    </p>
+
+    <div class="controls" id="controls" aria-label="Model parameters">
+      <div class="ctl"><label for="pN">Basis size N (odd)</label>
+        <span class="val" id="vN"></span><input type="range" id="pN" min="3" max="19" step="2" value="11">
+      </div>
+      <div class="ctl"><label for="pGamma">Prior scale γ</label>
+        <span class="val" id="vGamma"></span><input type="range" id="pGamma" min="0.25" max="4" step="0.25" value="2">
+      </div>
+      <div class="ctl"><label for="pEps">Prior decay ε</label>
+        <span class="val" id="vEps"></span><input type="range" id="pEps" min="0" max="2" step="0.05" value="0.5">
+      </div>
+      <div class="ctl"><label for="pNoise">Noise σ</label>
+        <span class="val" id="vNoise"></span><input type="range" id="pNoise" min="0.05" max="1" step="0.05" value="0.2">
+      </div>
+      <div class="ctl"><label for="pMeasA">Measurements (first)</label>
+        <span class="val" id="vMeasA"></span><input type="range" id="pMeasA" min="1" max="30" step="1" value="6">
+      </div>
+      <div class="ctl"><label for="pMeasB">Measurements (more)</label>
+        <span class="val" id="vMeasB"></span><input type="range" id="pMeasB" min="1" max="40" step="1" value="15">
+      </div>
+      <div class="ctl"><label for="pAdapt">Adaptive steps</label>
+        <span class="val" id="vAdapt"></span><input type="range" id="pAdapt" min="5" max="25" step="1" value="15">
+      </div>
+      <div class="ctl"><label for="pSamp">Prior samples</label>
+        <span class="val" id="vSamp"></span><input type="range" id="pSamp" min="1" max="8" step="1" value="5">
+      </div>
+      <div class="ctl"><label for="pSeed">Random seed</label>
+        <span class="val">&nbsp;</span><input type="number" id="pSeed" value="42" step="1">
+      </div>
+      <button type="button" id="btnReroll" title="Pick a new random seed">New draw 🎲</button>
+      <button type="button" id="btnReset" title="Restore the notebook's default parameters">Reset defaults</button>
+    </div>
+
+    <div class="grid8">
+      <section class="cell">
+        <h2>1 · Basis functions</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            Each candidate function is f(x) = w₀ + Σₖ [w cos(kx) + w sin(kx)]. The traces are
+            the N basis functions, offset vertically — DC at the top, frequency increasing
+            downward. Each cos/sin pair at the same frequency k shares a color (darker blue =
+            higher frequency).
+          </p>
+        </details>
+        <div class="card" id="panelBasis"></div>
+        <details class="tbl" id="tblBasis">
+          <summary>Data table (sampled)</summary>
+        </details>
+      </section>
+
+      <section class="cell">
+        <h2>2 · The prior</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            Each weight has prior w<sub>j</sub> ~ N(0, σ<sub>j</sub>²) with
+            σ<sub>j</sub> = γ·e<sup>−ε·k<sub>j</sub></sup>: γ sets the overall scale, ε
+            suppresses high frequencies — larger ε means smoother functions. Bars share the
+            frequency color-coding of panel 1.
+          </p>
+        </details>
+        <div class="card" id="panelPrior"></div>
+        <details class="tbl" id="tblPrior">
+          <summary>Data table</summary>
+        </details>
+      </section>
+
+      <section class="cell">
+        <h2>3 · Samples from the prior</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            Weight vectors drawn from the prior, each shown as its function f(x) = Bw —
+            plausible functions <em>before</em> any data. Increase ε to make them smoother;
+            decrease it to allow more wiggles.
+          </p>
+        </details>
+        <div class="card" id="panelSamples"></div>
+        <details class="tbl" id="tblSamples">
+          <summary>Data table (sampled)</summary>
+        </details>
+      </section>
+
+      <section class="cell">
+        <h2>4 · Bayesian inference</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            A true function is drawn from the prior and measured at random locations with
+            Gaussian noise. Because prior and likelihood are both Gaussian, the posterior over
+            weights is Gaussian in closed form; its mean function is the best estimate given
+            the data.
+          </p>
+        </details>
+        <div class="card" id="panelInfer"></div>
+        <details class="tbl" id="tblInfer">
+          <summary>Measurements table</summary>
+        </details>
+      </section>
+
+      <section class="cell">
+        <h2>5 · More data → better estimate</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            The same true function with more measurements: each measurement adds a row to the
+            design matrix, pulling the posterior mean toward the data and shrinking its
+            covariance.
+          </p>
+        </details>
+        <div class="card" id="panelHoming"></div>
+      </section>
+
+      <section class="cell">
+        <h2>6 · Credible intervals</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            The shaded band is the 95 % credible interval, mean ± 1.96·σ<sub>post</sub>(x),
+            from the posterior predictive variance b(x)ᵀ Σ<sub>post</sub> b(x). The band is
+            narrowest near measurements and widest in the gaps.
+          </p>
+        </details>
+        <div class="card" id="panelCI"></div>
+      </section>
+
+      <section class="cell">
+        <h2>7 · Adaptive sampling</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            Instead of random placement, put each new measurement where the posterior is
+            currently most uncertain (greedy maximum-variance design). Drag the step slider to
+            watch the sequence; the dotted vertical line marks where the <em>next</em>
+            measurement will land.
+          </p>
+        </details>
+        <div class="card" id="panelAdapt"></div>
+      </section>
+
+      <section class="cell">
+        <h2>8 · Adaptive vs. random</h2>
+        <details class="cap">
+          <summary>About</summary>
+          <p>
+            Head-to-head with the same true function and noise: the same number of randomly
+            placed vs. adaptively placed measurements. The same idea — placing trials where the
+            current model is uncertain — underlies the AEPsych-driven data collection in
+            Hong et&nbsp;al. (2025).
+          </p>
+        </details>
+        <div class="tiles" id="tilesRMSE"></div>
+        <div class="card" id="panelCompare"></div>
+        <details class="tbl" id="tblCompare">
+          <summary>Measurements table</summary>
+        </details>
+      </section>
+    </div>
+
+    <footer>
+      Companion to <code>tutorial/example_finitebasis_gaussian/example_finitebasis_gaussian.ipynb</code>
+      (BrainardLab/wppmpy_public). The mathematics matches the notebook; random draws use a
+      different generator than NumPy, so individual draws differ from the notebook at the same
+      seed while the statistical behaviour is identical.
+    </footer>
+  </main>
+
+  <div id="tooltip" role="status"></div>
+
+  <script>
+    "use strict";
+    /* ════════════════════════════ math ════════════════════════════ */
+
+    /* Seeded RNG (mulberry32) + Box–Muller normals. */
+    function makeRng(seed) {
+      let a = (seed >>> 0) || 1;
+      let spare = null;
+      const uniform = () => {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+      const normal = () => {
+        if (spare !== null) { const v = spare; spare = null; return v; }
+        let u = 0, v = 0, s = 0;
+        do { u = 2 * uniform() - 1; v = 2 * uniform() - 1; s = u * u + v * v; } while (s === 0 || s >= 1);
+        const m = Math.sqrt(-2 * Math.log(s) / s);
+        spare = v * m;
+        return u * m;
+      };
+      return { uniform, normal, int: (n) => Math.floor(uniform() * n) };
+    }
+
+    const M = 256;                               // domain sample count
+    const X = new Float64Array(M);
+    for (let i = 0; i < M; i++) X[i] = 2 * Math.PI * i / M;
+
+    /* One row of the basis matrix at location x. */
+    function basisRow(x, N) {
+      const r = new Float64Array(N);
+      r[0] = 1;
+      for (let k = 1; 2 * k < N + 1; k++) {
+        if (2 * k - 1 < N) r[2 * k - 1] = Math.cos(k * x);
+        if (2 * k < N) r[2 * k] = Math.sin(k * x);
+      }
+      return r;
+    }
+    function buildBasis(N) {                     // M×N, row-major
+      const B = new Array(M);
+      for (let i = 0; i < M; i++) B[i] = basisRow(X[i], N);
+      return B;
+    }
+
+    /* Gauss–Jordan inverse with partial pivoting (N ≤ 19, symmetric PD in practice). */
+    function matInv(A) {
+      const n = A.length;
+      const a = A.map((row, i) => {
+        const r = new Float64Array(2 * n); r.set(row); r[n + i] = 1; return r;
+      });
+      for (let col = 0; col < n; col++) {
+        let piv = col;
+        for (let r = col + 1; r < n; r++) if (Math.abs(a[r][col]) > Math.abs(a[piv][col])) piv = r;
+        [a[col], a[piv]] = [a[piv], a[col]];
+        const d = a[col][col];
+        for (let j = 0; j < 2 * n; j++) a[col][j] /= d;
+        for (let r = 0; r < n; r++) {
+          if (r === col) continue;
+          const f = a[r][col];
+          if (f === 0) continue;
+          for (let j = 0; j < 2 * n; j++) a[r][j] -= f * a[col][j];
+        }
+      }
+      return a.map((row) => row.slice(n));
+    }
+    const matVec = (A, v) => A.map((row) => row.reduce((s, x, j) => s + x * v[j], 0));
+
+    /* Posterior from information form: A = Λ⁻¹ + ΦᵀΦ/σn², c = Φᵀy/σn². */
+    function infoFromPrior(sigma) {
+      const N = sigma.length;
+      const A = Array.from({ length: N }, (_, i) => {
+        const r = new Float64Array(N); r[i] = 1 / (sigma[i] * sigma[i]); return r;
+      });
+      return { A, c: new Float64Array(N) };
+    }
+    function infoAdd(info, phi, y, noiseStd) {   // rank-1 update
+      const n2 = noiseStd * noiseStd, N = phi.length;
+      for (let i = 0; i < N; i++) {
+        info.c[i] += phi[i] * y / n2;
+        for (let j = 0; j < N; j++) info.A[i][j] += phi[i] * phi[j] / n2;
+      }
+    }
+    function posteriorFromInfo(info, B) {
+      const Sigma = matInv(info.A);
+      const mu = matVec(Sigma, info.c);
+      const mean = new Float64Array(M), std = new Float64Array(M);
+      for (let i = 0; i < M; i++) {
+        const b = B[i];
+        let m = 0; for (let j = 0; j < b.length; j++) m += b[j] * mu[j];
+        mean[i] = m;
+        let v = 0;
+        for (let j = 0; j < b.length; j++) {
+          let s = 0; for (let k = 0; k < b.length; k++) s += Sigma[j][k] * b[k];
+          v += b[j] * s;
+        }
+        std[i] = Math.sqrt(Math.max(v, 0));
+      }
+      return { mean, std };
+    }
+    const rmse = (a, b) => {
+      let s = 0; for (let i = 0; i < M; i++) { const d = a[i] - b[i]; s += d * d; }
+      return Math.sqrt(s / M);
+    };
+
+    /* ════════════════════════════ model run ════════════════════════════ */
+
+    function runModel(p) {
+      const N = p.N, nFreq = (N - 1) >> 1;
+      const B = buildBasis(N);
+      const orders = Array.from({ length: N }, (_, j) => (j + 1) >> 1);
+      const sigma = orders.map((k) => p.gamma * Math.exp(-p.eps * k));
+      const labels = ["DC"].concat(Array.from({ length: N - 1 },
+        (_, j) => `${(j + 1) % 2 ? "cos" : "sin"}(${((j + 1) + 1) >> 1}x)`));
+
+      // prior samples
+      const rngS = makeRng(p.seed * 7 + 1);
+      const samples = [];
+      for (let s = 0; s < p.nSamp; s++) {
+        const w = sigma.map((sd) => sd * rngS.normal());
+        const f = new Float64Array(M);
+        for (let i = 0; i < M; i++) { let v = 0; for (let j = 0; j < N; j++) v += B[i][j] * w[j]; f[i] = v; }
+        samples.push(f);
+      }
+
+      // true function
+      const rngT = makeRng(p.seed * 7 + 2);
+      const wTrue = sigma.map((sd) => sd * rngT.normal());
+      const fTrue = new Float64Array(M);
+      for (let i = 0; i < M; i++) { let v = 0; for (let j = 0; j < N; j++) v += B[i][j] * wTrue[j]; fTrue[i] = v; }
+
+      const measure = (rng, n) => {
+        const idx = [], xs = [], ys = [];
+        for (let t = 0; t < n; t++) {
+          const i = rng.int(M);
+          idx.push(i); xs.push(X[i]); ys.push(fTrue[i] + p.noise * rng.normal());
+        }
+        return { idx, xs, ys };
+      };
+      const fit = (meas) => {
+        const info = infoFromPrior(sigma);
+        for (let t = 0; t < meas.idx.length; t++) infoAdd(info, B[meas.idx[t]], meas.ys[t], p.noise);
+        return posteriorFromInfo(info, B);
+      };
+
+      const measA = measure(makeRng(p.seed * 7 + 3), p.nA);
+      const postA = fit(measA);
+      const measB = measure(makeRng(p.seed * 7 + 4), p.nB);
+      const postB = fit(measB);
+
+      // adaptive loop — record the posterior BEFORE each new measurement
+      const rngA = makeRng(p.seed * 7 + 5);
+      const info = infoFromPrior(sigma);
+      const steps = [];
+      const adMeas = { xs: [], ys: [] };
+      for (let s = 0; s < p.nAdapt; s++) {
+        const post = posteriorFromInfo(info, B);
+        let best = 0;
+        for (let i = 1; i < M; i++) if (post.std[i] > post.std[best]) best = i;
+        steps.push({ post, nextX: X[best], nMeas: s, xs: adMeas.xs.slice(), ys: adMeas.ys.slice() });
+        const y = fTrue[best] + p.noise * rngA.normal();
+        infoAdd(info, B[best], y, p.noise);
+        adMeas.xs.push(X[best]); adMeas.ys.push(y);
+      }
+      const postAd = posteriorFromInfo(info, B);
+      // random run with the SAME count as the adaptive run, for a fair comparison
+      const measR = measure(makeRng(p.seed * 7 + 6), p.nAdapt);
+      const postR = fit(measR);
+
+      return {
+        N, nFreq, B, sigma, labels, samples, fTrue,
+        measA, postA, measB, postB, steps, adMeas, postAd, measR, postR,
+        rmseR: rmse(postR.mean, fTrue), rmseAd: rmse(postAd.mean, fTrue)
+      };
+    }
+
+    /* ════════════════════════════ charting ════════════════════════════ */
+
+    const SVGNS = "http://www.w3.org/2000/svg";
+    const PI = Math.PI;
+    const XTICKS = [[0, "0"], [PI / 2, "π/2"], [PI, "π"], [3 * PI / 2, "3π/2"], [2 * PI, "2π"]];
+    const tooltip = document.getElementById("tooltip");
+
+    function el(name, attrs, parent) {
+      const e = document.createElementNS(SVGNS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(e);
+      return e;
+    }
+    function fmt(v, d = 2) { return Number(v).toFixed(d); }
+    function niceTicks(lo, hi, n = 5) {
+      const span = hi - lo || 1;
+      const step0 = span / n;
+      const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+      const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || 10 * mag;
+      const t = [];
+      for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) t.push(v);
+      return t;
+    }
+    function showTooltip(px, py, xLabel, rows) {
+      tooltip.textContent = "";
+      const hx = document.createElement("div");
+      hx.className = "tt-x"; hx.textContent = xLabel;
+      tooltip.appendChild(hx);
+      for (const r of rows) {
+        const d = document.createElement("div"); d.className = "row";
+        const k = document.createElement("span"); k.className = "k";
+        k.style.borderTopColor = r.color;
+        if (r.dash) k.style.borderTopStyle = "dashed";
+        const v = document.createElement("span"); v.className = "v"; v.textContent = r.value;
+        const n = document.createElement("span"); n.className = "n"; n.textContent = r.name;
+        d.append(k, v, n); tooltip.appendChild(d);
+      }
+      tooltip.style.display = "block";
+      const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+      let left = px + 14, top = py - h - 10;
+      if (left + w > window.innerWidth - 8) left = px - w - 14;
+      if (top < 8) top = py + 14;
+      tooltip.style.left = left + "px"; tooltip.style.top = top + "px";
+    }
+    function hideTooltip() { tooltip.style.display = "none"; }
+
+    function cssColor(varName) { return `var(${varName})`; }
+
+    function legendFor(container, keys) {
+      const lg = document.createElement("div");
+      lg.className = "legend";
+      for (const k of keys) {
+        const span = document.createElement("span"); span.className = "key";
+        const sw = document.createElement("span");
+        sw.className = "swatch-" + (k.kind || "line");
+        if (k.kind === "dot" || k.kind === "band") sw.style.background = k.color;
+        else sw.style.borderTopColor = k.color;
+        const t = document.createElement("span"); t.textContent = k.name;
+        span.append(sw, t); lg.appendChild(span);
+      }
+      container.appendChild(lg);
+      return lg;
+    }
+
+    /*
+     * Generic x–y chart on the shared domain.
+     * series: {name, color, kind:'line'|'band'|'dots', y|lo/hi|xs/ys, dash?}
+     * Crosshair tooltip lists every line/band series at the snapped x; dots get
+     * their own ≥24px hit targets. Keyboard: focus the svg, ←/→ move, Esc hides.
+     */
+    function xyChart(container, opts) {
+      const W = opts.width || 640, H = opts.height || 330;
+      const m = Object.assign({ l: 42, r: 12, t: 10, b: 30 }, opts.margin);
+      const pw = W - m.l - m.r, ph = H - m.t - m.b;
+
+      let lo = Infinity, hi = -Infinity;
+      for (const s of opts.series) {
+        const scan = (arr) => { for (const v of arr) { if (v < lo) lo = v; if (v > hi) hi = v; } };
+        if (s.kind === "band") { scan(s.lo); scan(s.hi); }
+        else if (s.kind === "dots") scan(s.ys);
+        else scan(s.y);
+      }
+      if (opts.yDomain) { lo = opts.yDomain[0]; hi = opts.yDomain[1]; }
+      else { const pad = 0.07 * (hi - lo || 1); lo -= pad; hi += pad; }
+
+      const sx = (x) => m.l + pw * x / (2 * PI);
+      const sy = (y) => m.t + ph * (1 - (y - lo) / (hi - lo));
+
+      const svg = el("svg", {
+        viewBox: `0 0 ${W} ${H}`, class: "chart", tabindex: "0",
+        role: "img", "aria-label": opts.aria || "chart"
+      });
+      container.appendChild(svg);
+
+      if (!opts.noAxes) {
+        for (const ty of niceTicks(lo, hi, opts.yTickCount || 5)) {
+          el("line", { x1: m.l, x2: m.l + pw, y1: sy(ty), y2: sy(ty), class: "gridline" }, svg);
+          const t = el("text", { x: m.l - 7, y: sy(ty) + 3.5, "text-anchor": "end", class: "ticktext" }, svg);
+          t.textContent = Math.abs(ty) < 1e-9 ? "0" : fmt(ty, Math.abs(hi - lo) < 2 ? 2 : 1);
+        }
+        el("line", { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, class: "axisline" }, svg);
+        for (const [tx, lab] of XTICKS) {
+          el("line", { x1: sx(tx), x2: sx(tx), y1: m.t + ph, y2: m.t + ph + 4, class: "axisline" }, svg);
+          const t = el("text", { x: sx(tx), y: m.t + ph + 16, "text-anchor": "middle", class: "ticktext" }, svg);
+          t.textContent = lab;
+        }
+      }
+
+      const linePath = (ys) => {
+        let d = "";
+        for (let i = 0; i < M; i++) d += (i ? "L" : "M") + fmt(sx(X[i]), 1) + " " + fmt(sy(ys[i]), 1);
+        return d;
+      };
+      for (const s of opts.series) {
+        if (s.kind === "band") {
+          let d = "";
+          for (let i = 0; i < M; i++) d += (i ? "L" : "M") + fmt(sx(X[i]), 1) + " " + fmt(sy(s.hi[i]), 1);
+          for (let i = M - 1; i >= 0; i--) d += "L" + fmt(sx(X[i]), 1) + " " + fmt(sy(s.lo[i]), 1);
+          el("path", { d: d + "Z", fill: s.color, "fill-opacity": "0.13", stroke: "none" }, svg);
+        }
+      }
+      if (opts.vline !== undefined) {
+        el("line", {
+          x1: sx(opts.vline), x2: sx(opts.vline), y1: m.t, y2: m.t + ph,
+          stroke: cssColor("--text-muted"), "stroke-width": 1.4, "stroke-dasharray": "2 4"
+        }, svg);
+      }
+      for (const s of opts.series) {
+        if (s.kind === "band") continue;
+        if (s.kind === "dots") {
+          for (let i = 0; i < s.xs.length; i++) {
+            el("circle", {
+              cx: sx(s.xs[i]), cy: sy(s.ys[i]), r: opts.dotR || 4.5,
+              fill: s.color, stroke: cssColor("--surface-1"), "stroke-width": 2
+            }, svg);
+          }
+        } else {
+          const attrs = {
+            d: linePath(s.y), fill: "none", stroke: s.color,
+            "stroke-width": opts.lineW || 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+          };
+          if (s.dash) attrs["stroke-dasharray"] = "6 5";
+          el("path", attrs, svg);
+        }
+      }
+
+      if (opts.noHover) return svg;
+
+      /* crosshair + tooltip */
+      const xh = el("line", { y1: m.t, y2: m.t + ph, class: "xhair", visibility: "hidden" }, svg);
+      const hoverDots = opts.series.filter((s) => s.kind !== "dots" && s.kind !== "band")
+        .map((s) => el("circle", {
+          r: 4.5, fill: s.color, stroke: cssColor("--surface-1"),
+          "stroke-width": 2, visibility: "hidden"
+        }, svg));
+      const dotSeries = opts.series.filter((s) => s.kind === "dots");
+
+      const showAt = (idx, clientX, clientY) => {
+        const px = sx(X[idx]);
+        xh.setAttribute("x1", px); xh.setAttribute("x2", px);
+        xh.setAttribute("visibility", "visible");
+        const rows = [];
+        let d = 0;
+        for (const s of opts.series) {
+          if (s.kind === "dots") continue;
+          if (s.kind === "band") {
+            rows.push({
+              name: s.name, color: s.color,
+              value: fmt(s.lo[idx], 2) + " … " + fmt(s.hi[idx], 2)
+            });
+          } else {
+            const dot = hoverDots[d++];
+            dot.setAttribute("cx", px); dot.setAttribute("cy", sy(s.y[idx]));
+            dot.setAttribute("visibility", "visible");
+            rows.push({ name: s.name, color: s.color, dash: s.dash, value: fmt(s.y[idx], 3) });
+          }
+        }
+        showTooltip(clientX, clientY, "x = " + fmt(X[idx], 2), rows);
+      };
+      const hideAll = () => {
+        xh.setAttribute("visibility", "hidden");
+        for (const d of hoverDots) d.setAttribute("visibility", "hidden");
+        hideTooltip();
+      };
+      let kbIdx = M >> 1;
+      svg.addEventListener("pointermove", (ev) => {
+        const r = svg.getBoundingClientRect();
+        const xFrac = ((ev.clientX - r.left) / r.width * W - m.l) / pw;
+        // nearest measurement dot first (≥24px effective target via nearest-x search)
+        for (const s of dotSeries) {
+          for (let i = 0; i < s.xs.length; i++) {
+            const dxp = (sx(s.xs[i]) / W) * r.width + r.left - ev.clientX;
+            const dyp = (sy(s.ys[i]) / H) * r.height + r.top - ev.clientY;
+            if (dxp * dxp + dyp * dyp < 144) {   // within 12px
+              hideAll();
+              showTooltip(ev.clientX, ev.clientY, "x = " + fmt(s.xs[i], 2),
+                [{ name: s.name, color: s.color, value: fmt(s.ys[i], 3) }]);
+              return;
+            }
+          }
+        }
+        const idx = Math.max(0, Math.min(M - 1, Math.round(xFrac * M)));
+        kbIdx = idx;
+        showAt(idx, ev.clientX, ev.clientY);
+      });
+      svg.addEventListener("pointerleave", hideAll);
+      svg.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") { hideAll(); return; }
+        if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+        ev.preventDefault();
+        kbIdx = (kbIdx + (ev.key === "ArrowRight" ? 4 : -4) + M) % M;
+        const r = svg.getBoundingClientRect();
+        showAt(kbIdx, r.left + (sx(X[kbIdx]) / W) * r.width, r.top + r.height * 0.3);
+      });
+      svg.addEventListener("blur", hideAll);
+      return svg;
+    }
+
+    /* ════════════════════════════ panels ════════════════════════════ */
+
+    const $ = (id) => document.getElementById(id);
+    function rampColor(k, nFreq) {
+      // 5-step documented ordinal ramp, spread across frequencies in use
+      const step = nFreq <= 1 ? 0 : (k - 1) / (nFreq - 1) * 4;
+      return cssColor("--ramp-" + (Math.round(step) + 1));
+    }
+    function clearPanel(node) { node.textContent = ""; }
+
+    function tableInto(details, headers, rows) {
+      const old = details.querySelector("table");
+      if (old) old.remove();
+      const tb = document.createElement("table");
+      const tr = document.createElement("tr");
+      for (const h of headers) { const th = document.createElement("th"); th.textContent = h; tr.appendChild(th); }
+      tb.appendChild(tr);
+      for (const row of rows) {
+        const r = document.createElement("tr");
+        for (const c of row) { const td = document.createElement("td"); td.textContent = c; r.appendChild(td); }
+        tb.appendChild(r);
+      }
+      details.appendChild(tb);
+    }
+    const sampleIdx = Array.from({ length: 17 }, (_, i) => Math.min(M - 1, Math.round(i * M / 16)));
+
+    function renderBasis(R) {
+      const node = $("panelBasis"); clearPanel(node);
+      const W = 640, offset = 2.5, Hplot = 18 * (R.N) + 40;
+      const m = { l: 16, r: 64, t: 8, b: 28 };
+      const H = Hplot + m.t + m.b;
+      const svg = el("svg", {
+        viewBox: `0 0 ${W} ${H}`, class: "chart",
+        role: "img", "aria-label": "Sinusoidal basis functions, offset vertically"
+      });
+      node.appendChild(svg);
+      const pw = W - m.l - m.r, ph = H - m.t - m.b;
+      const totalSpan = (R.N - 1) * offset + 2.4;
+      const sx = (x) => m.l + pw * x / (2 * PI);
+      const sy = (v) => m.t + ph * (1 - (v + 1.2) / totalSpan);
+      el("line", { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, class: "axisline" }, svg);
+      for (const [tx, lab] of XTICKS) {
+        const t = el("text", { x: sx(tx), y: m.t + ph + 16, "text-anchor": "middle", class: "ticktext" }, svg);
+        t.textContent = lab;
+      }
+      for (let j = 0; j < R.N; j++) {
+        const off = (R.N - 1 - j) * offset;
+        const color = j === 0 ? cssColor("--text-primary") : rampColor((j + 1) >> 1, R.nFreq);
+        let d = "";
+        for (let i = 0; i < M; i++) {
+          d += (i ? "L" : "M") + fmt(sx(X[i]), 1) + " " + fmt(sy(R.B[i][j] + off), 1);
+        }
+        el("path", { d, fill: "none", stroke: color, "stroke-width": 1.6, "stroke-linejoin": "round" }, svg);
+        const t = el("text", { x: m.l + pw + 8, y: sy(off) + 3.5, class: "tracelab" }, svg);
+        t.textContent = R.labels[j];
+      }
+      tableInto($("tblBasis"), ["x"].concat(R.labels),
+        sampleIdx.map((i) => [fmt(X[i], 2)].concat(
+          Array.from({ length: R.N }, (_, j) => fmt(R.B[i][j], 3)))));
+    }
+
+    function renderPrior(R, p) {
+      const node = $("panelPrior"); clearPanel(node);
+      const W = 640, H = 330, m = { l: 42, r: 12, t: 12, b: 52 };
+      const pw = W - m.l - m.r, ph = H - m.t - m.b;
+      const svg = el("svg", {
+        viewBox: `0 0 ${W} ${H}`, class: "chart",
+        role: "img", "aria-label": "Prior standard deviation per basis function"
+      });
+      node.appendChild(svg);
+      const maxV = Math.max(...R.sigma) * 1.1;
+      const sy = (v) => m.t + ph * (1 - v / maxV);
+      for (const ty of niceTicks(0, maxV, 4)) {
+        el("line", { x1: m.l, x2: m.l + pw, y1: sy(ty), y2: sy(ty), class: "gridline" }, svg);
+        const t = el("text", { x: m.l - 7, y: sy(ty) + 3.5, "text-anchor": "end", class: "ticktext" }, svg);
+        t.textContent = fmt(ty, 1);
+      }
+      el("line", { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, class: "axisline" }, svg);
+      const band = pw / R.N;
+      const bw = Math.min(24, band - 2);
+      for (let j = 0; j < R.N; j++) {
+        const cx = m.l + band * (j + 0.5);
+        const color = j === 0 ? cssColor("--text-primary") : rampColor((j + 1) >> 1, R.nFreq);
+        const y0 = sy(R.sigma[j]), hgt = m.t + ph - y0;
+        const r = Math.min(4, hgt);
+        el("path", {
+          d: `M${cx - bw / 2} ${m.t + ph} V${y0 + r} Q${cx - bw / 2} ${y0} ${cx - bw / 2 + r} ${y0} H${cx + bw / 2 - r} Q${cx + bw / 2} ${y0} ${cx + bw / 2} ${y0 + r} V${m.t + ph} Z`,
+          fill: color
+        }, svg);
+        const t = el("text", {
+          x: cx, y: m.t + ph + 12, class: "ticktext",
+          "text-anchor": "end", transform: `rotate(-40 ${cx} ${m.t + ph + 12})`
+        }, svg);
+        t.textContent = R.labels[j];
+        // ≥24px hit target per bar
+        const hit = el("rect", { x: cx - band / 2, y: m.t, width: band, height: ph, fill: "transparent" }, svg);
+        hit.addEventListener("pointermove", (ev) => showTooltip(ev.clientX, ev.clientY, R.labels[j],
+          [{ name: "prior σ", color, value: fmt(R.sigma[j], 3) }]));
+        hit.addEventListener("pointerleave", hideTooltip);
+      }
+      const t = el("text", { x: 12, y: m.t + 2, class: "ticktext", transform: `rotate(-90 12 ${m.t + 2})`, "text-anchor": "end" }, svg);
+      t.textContent = "prior σⱼ";
+      tableInto($("tblPrior"), ["basis fn", "order k", "prior σ"],
+        R.labels.map((lab, j) => [lab, String((j + 1) >> 1), fmt(R.sigma[j], 4)]));
+    }
+
+    function renderSamples(R) {
+      const node = $("panelSamples"); clearPanel(node);
+      const series = R.samples.map((f, s) => ({
+        name: "sample " + (s + 1), color: cssColor("--series-" + (s + 1)), y: f
+      }));
+      legendFor(node, series.map((s) => ({ name: s.name, color: s.color })));
+      xyChart(node, { series, aria: "Functions sampled from the prior" });
+      tableInto($("tblSamples"), ["x"].concat(series.map((s) => s.name)),
+        sampleIdx.map((i) => [fmt(X[i], 2)].concat(series.map((s) => fmt(s.y[i], 3)))));
+    }
+
+    const KEY_TRUE = () => ({ name: "True function", color: cssColor("--series-1") });
+    const KEY_POST = (c) => ({ name: "Posterior mean", color: c, kind: "dash" });
+    const KEY_MEAS = () => ({ name: "Measurements", color: cssColor("--text-primary"), kind: "dot" });
+    const KEY_BAND = (c) => ({ name: "95 % credible interval", color: c, kind: "band" });
+
+    function inferSeries(R, meas, post, postColor, withBand) {
+      const s = [];
+      if (withBand) s.push({
+        name: "95 % CI", color: postColor, kind: "band",
+        lo: post.mean.map((v, i) => v - 1.96 * post.std[i]),
+        hi: post.mean.map((v, i) => v + 1.96 * post.std[i])
+      });
+      s.push({ name: "True function", color: cssColor("--series-1"), y: R.fTrue });
+      s.push({ name: "Posterior mean", color: postColor, y: post.mean, dash: true });
+      s.push({
+        name: "Measurements", color: cssColor("--text-primary"), kind: "dots",
+        xs: meas.xs, ys: meas.ys
+      });
+      return s;
+    }
+
+    function renderInfer(R, p) {
+      const node = $("panelInfer"); clearPanel(node);
+      legendFor(node, [KEY_TRUE(), KEY_POST(cssColor("--series-2")), KEY_MEAS()]);
+      xyChart(node, {
+        series: inferSeries(R, R.measA, R.postA, cssColor("--series-2"), false),
+        aria: `Posterior mean from ${p.nA} measurements`
+      });
+      tableInto($("tblInfer"), ["#", "x", "y measured", "f true at x"],
+        R.measA.xs.map((x, i) => [String(i + 1), fmt(x, 3), fmt(R.measA.ys[i], 3),
+        fmt(R.fTrue[R.measA.idx[i]], 3)]));
+    }
+
+    function duoPanel(node, R, p, withBand, colA, colB) {
+      clearPanel(node);
+      legendFor(node, (withBand ? [KEY_BAND(colB)] : []).concat(
+        [KEY_TRUE(), KEY_POST(colB), KEY_MEAS()]));
+      const duo = document.createElement("div"); duo.className = "duo";
+      node.appendChild(duo);
+      let lo = Infinity, hi = -Infinity;
+      for (const post of [R.postA, R.postB]) {
+        for (let i = 0; i < M; i++) {
+          const pad = withBand ? 1.96 * post.std[i] : 0;
+          lo = Math.min(lo, post.mean[i] - pad, R.fTrue[i]);
+          hi = Math.max(hi, post.mean[i] + pad, R.fTrue[i]);
+        }
+      }
+      for (const y of R.measA.ys.concat(R.measB.ys)) { lo = Math.min(lo, y); hi = Math.max(hi, y); }
+      const padY = 0.07 * (hi - lo || 1);
+      const yDomain = [lo - padY, hi + padY];
+      const cases = [[R.measA, R.postA, p.nA, colA], [R.measB, R.postB, p.nB, colB]];
+      for (const [meas, post, n, col] of cases) {
+        const cell = document.createElement("div");
+        const sub = document.createElement("p"); sub.className = "panel-sub";
+        sub.textContent = `${n} measurements`;
+        cell.appendChild(sub);
+        duo.appendChild(cell);
+        xyChart(cell, {
+          series: inferSeries(R, meas, post, col, withBand),
+          width: 480, height: 280, yDomain, aria: `Posterior from ${n} measurements`
+        });
+      }
+    }
+
+    let adaptScrubPos = null;   // remember the slider position across re-renders
+
+    function renderAdaptive(R, p) {
+      const node = $("panelAdapt"); clearPanel(node);
+      legendFor(node, [KEY_BAND(cssColor("--series-3")), KEY_TRUE(),
+      KEY_POST(cssColor("--series-3")), KEY_MEAS(),
+      { name: "Next measurement", color: cssColor("--text-muted"), kind: "dash" }]);
+
+      // steps[k] = posterior after k measurements (with next-location marker);
+      // append the final state after all measurements (no marker).
+      const allSteps = R.steps.concat([{
+        post: R.postAd, nextX: undefined, nMeas: p.nAdapt,
+        xs: R.adMeas.xs, ys: R.adMeas.ys
+      }]);
+
+      const scrub = document.createElement("div"); scrub.className = "scrub";
+      const labId = "adaptStep";
+      const lab = document.createElement("label");
+      lab.textContent = "Measurements so far:"; lab.setAttribute("for", labId);
+      const rng = document.createElement("input");
+      rng.type = "range"; rng.id = labId; rng.min = "0"; rng.max = String(p.nAdapt);
+      rng.value = String(adaptScrubPos === null ? p.nAdapt : Math.min(adaptScrubPos, p.nAdapt));
+      const out = document.createElement("span"); out.className = "val";
+      scrub.append(lab, rng, out);
+      const chartHost = document.createElement("div");
+      node.append(scrub, chartHost);
+
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < M; i++) { lo = Math.min(lo, R.fTrue[i]); hi = Math.max(hi, R.fTrue[i]); }
+      const span = hi - lo;
+      const yDomain = [lo - 0.6 * span, hi + 0.6 * span];
+
+      const draw = () => {
+        const k = +rng.value;
+        adaptScrubPos = k;
+        out.textContent = String(k);
+        chartHost.textContent = "";
+        const st = allSteps[k];
+        xyChart(chartHost, {
+          width: 640, height: 300, yDomain, vline: st.nextX,
+          aria: `Adaptive sampling after ${st.nMeas} measurements`,
+          series: [
+            {
+              name: "95 % CI", color: cssColor("--series-3"), kind: "band",
+              lo: st.post.mean.map((v, i) => v - 1.96 * st.post.std[i]),
+              hi: st.post.mean.map((v, i) => v + 1.96 * st.post.std[i])
+            },
+            { name: "True function", color: cssColor("--series-1"), y: R.fTrue },
+            { name: "Posterior mean", color: cssColor("--series-3"), y: st.post.mean, dash: true },
+            {
+              name: "Measurements", color: cssColor("--text-primary"), kind: "dots",
+              xs: st.xs, ys: st.ys
+            },
+          ]
+        });
+      };
+      rng.addEventListener("input", draw);
+      draw();
+    }
+
+    function renderCompare(R, p) {
+      const tiles = $("tilesRMSE"); tiles.textContent = "";
+      const mk = (lbl, num, sub) => {
+        const t = document.createElement("div"); t.className = "tile";
+        const a = document.createElement("div"); a.className = "lbl"; a.textContent = lbl;
+        const b = document.createElement("div"); b.className = "num"; b.textContent = num;
+        const c = document.createElement("div"); c.className = "sub"; c.textContent = sub;
+        t.append(a, b, c); tiles.appendChild(t);
+      };
+      mk("Random RMSE", fmt(R.rmseR, 3), `${p.nAdapt} random measurements`);
+      mk("Adaptive RMSE", fmt(R.rmseAd, 3), `${p.nAdapt} adaptive measurements`);
+      const red = 100 * (1 - R.rmseAd / R.rmseR);
+      mk("RMSE change", (red >= 0 ? "−" : "+") + fmt(Math.abs(red), 0) + " %",
+        red >= 0 ? "adaptive vs. random" : "adaptive worse this draw");
+
+      const node = $("panelCompare"); clearPanel(node);
+      legendFor(node, [KEY_TRUE(),
+      { name: "Posterior mean (random)", color: cssColor("--series-2"), kind: "dash" },
+      { name: "Posterior mean (adaptive)", color: cssColor("--series-3"), kind: "dash" },
+      KEY_MEAS()]);
+      const duo = document.createElement("div"); duo.className = "duo";
+      node.appendChild(duo);
+      let lo = Infinity, hi = -Infinity;
+      for (const post of [R.postR, R.postAd]) {
+        for (let i = 0; i < M; i++) {
+          lo = Math.min(lo, post.mean[i] - 1.96 * post.std[i], R.fTrue[i]);
+          hi = Math.max(hi, post.mean[i] + 1.96 * post.std[i], R.fTrue[i]);
+        }
+      }
+      for (const y of R.measR.ys.concat(R.adMeas.ys)) { lo = Math.min(lo, y); hi = Math.max(hi, y); }
+      const padY = 0.07 * (hi - lo || 1);
+      const yDomain = [lo - padY, hi + padY];
+      const cases = [
+        ["random", R.measR.xs, R.measR.ys, R.postR, cssColor("--series-2")],
+        ["adaptive", R.adMeas.xs, R.adMeas.ys, R.postAd, cssColor("--series-3")],
+      ];
+      for (const [lab, xs, ys, post, col] of cases) {
+        const cell = document.createElement("div");
+        const sub = document.createElement("p"); sub.className = "panel-sub";
+        sub.textContent = `${xs.length} ${lab} measurements`;
+        cell.appendChild(sub);
+        duo.appendChild(cell);
+        xyChart(cell, {
+          width: 480, height: 280, yDomain, aria: `${lab} sampling result`,
+          series: [
+            {
+              name: "95 % CI", color: col, kind: "band",
+              lo: post.mean.map((v, i) => v - 1.96 * post.std[i]),
+              hi: post.mean.map((v, i) => v + 1.96 * post.std[i])
+            },
+            { name: "True function", color: cssColor("--series-1"), y: R.fTrue },
+            { name: `Posterior mean (${lab})`, color: col, y: post.mean, dash: true },
+            { name: "Measurements", color: cssColor("--text-primary"), kind: "dots", xs, ys },
+          ]
+        });
+      }
+      tableInto($("tblCompare"), ["#", "x random", "y random", "x adaptive", "y adaptive"],
+        Array.from({ length: p.nAdapt }, (_, i) => [String(i + 1),
+        fmt(R.measR.xs[i], 3), fmt(R.measR.ys[i], 3),
+        fmt(R.adMeas.xs[i], 3), fmt(R.adMeas.ys[i], 3)]));
+    }
+
+    /* ════════════════════════════ wiring ════════════════════════════ */
+
+    const DEFAULTS = {
+      pN: 11, pGamma: 2, pEps: 0.5, pNoise: 0.2, pMeasA: 6, pMeasB: 15,
+      pAdapt: 15, pSamp: 5, pSeed: 42
+    };
+
+    function readParams() {
+      return {
+        N: +$("pN").value, gamma: +$("pGamma").value, eps: +$("pEps").value,
+        noise: +$("pNoise").value, nA: +$("pMeasA").value, nB: +$("pMeasB").value,
+        nAdapt: +$("pAdapt").value, nSamp: +$("pSamp").value,
+        seed: Math.trunc(+$("pSeed").value) || 1,
+      };
+    }
+    function showVals(p) {
+      $("vN").textContent = p.N;
+      $("vGamma").textContent = fmt(p.gamma, 2);
+      $("vEps").textContent = fmt(p.eps, 2);
+      $("vNoise").textContent = fmt(p.noise, 2);
+      $("vMeasA").textContent = p.nA;
+      $("vMeasB").textContent = p.nB;
+      $("vAdapt").textContent = p.nAdapt;
+      $("vSamp").textContent = p.nSamp;
+    }
+    function renderAll() {
+      const p = readParams();
+      showVals(p);
+      const R = runModel(p);
+      renderBasis(R);
+      renderPrior(R, p);
+      renderSamples(R);
+      renderInfer(R, p);
+      duoPanel($("panelHoming"), R, p, false, cssColor("--series-2"), cssColor("--series-2"));
+      duoPanel($("panelCI"), R, p, true, cssColor("--series-2"), cssColor("--series-2"));
+      renderAdaptive(R, p);
+      renderCompare(R, p);
+    }
+
+    let pending = null;
+    function scheduleRender() {
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(() => { pending = null; renderAll(); }, 60);
+    }
+    for (const id of Object.keys(DEFAULTS)) $(id).addEventListener("input", scheduleRender);
+    $("btnReroll").addEventListener("click", () => {
+      $("pSeed").value = String(1 + Math.floor(Math.random() * 99999));
+      renderAll();
+    });
+    $("btnReset").addEventListener("click", () => {
+      for (const [id, v] of Object.entries(DEFAULTS)) $(id).value = String(v);
+      renderAll();
+    });
+
+    /* theme toggle: auto → light → dark */
+    const THEMES = ["auto", "light", "dark"];
+    let themeIdx = 0;
+    $("themeToggle").addEventListener("click", () => {
+      themeIdx = (themeIdx + 1) % 3;
+      const t = THEMES[themeIdx];
+      if (t === "auto") document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", t);
+      $("themeToggle").textContent = "Theme: " + t;
+    });
+
+    renderAll();
+  </script>
+</body>
+
+</html>

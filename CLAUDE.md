@@ -139,6 +139,40 @@ Both scripts look in `network_disk_path/sub{id}/` (no practice subdirectory).
 Session file glob includes session number (`*session{N}*`) to avoid matching
 stale files from prior sessions.
 
+## Interactive tutorial page (tutorial/example_finitebasis_gaussian/)
+
+`example_finitebasis_gaussian_interactive.html` is a self-contained
+single-file dashboard version of `example_finitebasis_gaussian.ipynb`
+(vanilla JS/SVG, no server; open in any browser).  It is a **hand-written
+JavaScript port** of the notebook's math — there is no automatic link, so any
+algorithm change in the notebook must be re-ported by hand and the page
+silently shows the old algorithm until it is.
+
+Notebook → JS mapping (all in the HTML's `<script>` block):
+
+- basis construction → `basisRow()` / `buildBasis()`
+- prior σⱼ = γ·e^(−εk) → `sigma = ...` in `runModel()`
+- conjugate posterior update → `infoFromPrior()` / `infoAdd()` /
+  `posteriorFromInfo()` (information form; rank-1 updates for the
+  adaptive loop)
+- greedy max-variance adaptive loop → "adaptive loop" block in `runModel()`
+- drawing → `render*()` / `duoPanel()` functions; new tunable parameters also
+  need a slider in the controls row plus `readParams()`/`DEFAULTS` entries
+
+When porting a change, verify numerically with a deterministic test case
+(fixed measurement x/y lists; compare posterior mean between notebook and
+JS console) — seeded random draws do NOT match across languages (mulberry32
+vs NumPy), only deterministic quantities do.  Then re-render both themes
+headlessly and eyeball:
+`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless
+--screenshot=out.png --window-size=2560,1440 file://...html`
+
+Styling follows the dataviz skill's reference palette (CSS custom properties
+at the top of the file; light + dark stepped variants, ordinal blue ramp for
+frequency order).  Layout is a 2×4 grid sized so all 8 panels fit one
+high-res window; panel 7 uses a step scrubber instead of the notebook's
+15-panel montage.
+
 ## Notebooks (analysis/upenn/hong_etal_2025/)
 
 - **`ellipses_from_tables.ipynb`** — reads `Sigmas_thres` directly from CSV;
