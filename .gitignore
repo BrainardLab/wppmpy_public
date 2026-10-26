@@ -30,3 +30,6 @@ local/
 # Legacy: data/ was used before the local/ scheme; kept to ignore any stale copies.
 data/
 /local
+
+# Logs written by aepsych at import/run time
+aepsych/logs/
