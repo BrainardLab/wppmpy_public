@@ -113,6 +113,43 @@ Machine-specific paths (network disk, stimulus files) are configured via
 
 ---
 
+## Setting up a new machine
+
+Prefer a fresh `git clone` over copying the repository directory from another
+machine: the virtual environments and the installed git pre-commit hook embed
+absolute paths to the old machine's Python interpreter and silently break when
+moved.
+
+On a fresh clone:
+
+1. Install the analysis environment (and, if needed, the experiment
+   environment) following the instructions above.  On macOS the system Python
+   is too old; use Python ≥ 3.12 (e.g. `brew install python@3.12`, then
+   `/opt/homebrew/bin/python3.12 -m venv analysis.venv`).
+2. Install the git hooks (they do not come with a clone):
+   ```bash
+   source analysis.venv/bin/activate
+   pip install pre-commit
+   pre-commit install
+   ```
+   Note the pytest hook runs `python`, so commit with `analysis.venv`
+   activated.
+3. Download the data: `python analysis/upenn/hong_etal_2025/download_data.py`
+   (or copy `local/` from the old machine — it is plain data and moves fine).
+4. For the experiment environment, create
+   `aepsych/generic/networkdisktest/local_config.json` from its `.template`
+   and set the machine-specific paths.  Watch out for Dropbox: newer clients
+   live under `~/Library/CloudStorage/Dropbox-…` rather than `~/Dropbox …`.
+
+If you did copy the repo wholesale from another machine, repair it by:
+deleting and recreating both venvs (`analysis.venv/`, `aepsych/aepsych.venv/`)
+and re-running the `pip install -e` steps; re-running `pre-commit install`
+from the new `analysis.venv` (the copied `.git/hooks/pre-commit` points at the
+old machine's interpreter); and checking the paths in any copied
+`local_config.json`.
+
+---
+
 ## Examples
 
 ### Bayesian inference with a finite sinusoidal basis

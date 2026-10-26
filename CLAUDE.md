@@ -28,6 +28,16 @@ wppmpy_public/
 | Analysis (notebooks, toolbox) | `analysis.venv/` | `source analysis.venv/bin/activate` |
 | Experiment / simulation | `aepsych/aepsych.venv/` | `source aepsych/aepsych.venv/bin/activate` |
 
+## New machine setup
+
+See "Setting up a new machine" in README.md.  Key points: never copy the repo
+directory between machines (venvs and the installed pre-commit hook embed
+absolute interpreter paths) — clone fresh, rebuild both venvs with Python ≥
+3.12, re-run `pre-commit install` from `analysis.venv`, and check paths in
+gitignored `local_config.json` files (Dropbox may live under
+`~/Library/CloudStorage/`).  If a repo was copied anyway, delete and recreate
+both venvs and re-run `pre-commit install`.
+
 ## aepsych/ subdirectory
 
 Self-contained environment for running AEPsych-based color discrimination
@@ -54,7 +64,7 @@ source aepsych.venv/bin/activate
 pip install -e .
 ```
 
-`ellipsoids-elife2025` is fetched automatically from the `dev` branch of
+`ellipsoids-elife2025` is fetched automatically from the `main` branch of
 `fh862/ellipsoids_public` on GitHub — no manual clone needed.
 
 ### Run scripts
